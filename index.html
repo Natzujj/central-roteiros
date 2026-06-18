@@ -7,11 +7,16 @@
     <link rel="icon" type="image/x-icon" href="/assets/tutorial-icon.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet" />
     <link rel="stylesheet" href="/assets/style.css">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
 </head>
-<div id="taskbar"></div>
 
 <body>
+    <div id="taskbar"></div>
 
     <div id="sidebar" class="win-panel">
         <div class="win-titlebar" id="sidebar-title" ondblclick="restorePanel('sidebar')">
@@ -23,7 +28,8 @@
             </div>
         </div>
         <div class="win-menubar">
-            <span onclick="document.getElementById('fileUpload').click()">Novo</span>
+            <span onclick="criarNovoRoteiro()" style="font-weight: bold; color: #006600; cursor: pointer;">[+] Criar</span>
+            <span onclick="document.getElementById('fileUpload').click()" style="cursor: pointer;">Novo</span>
             <input type="file" id="fileUpload" accept="application/pdf" style="display:none" onchange="enviarPDF(this)">
         </div>
 
@@ -60,10 +66,10 @@
             </div>
         </div>
         <div class="win-menubar">
-            <span onclick="restorePanel('content-wrapper')">Editar</span>
+            <span onclick="ativarModoEdicao()" style="font-weight: bold; cursor: pointer;">Editar</span>
             <span>Exibir</span>
-            <span onclick="imprimirConteudo()">Imprimir</span>
-            <span onclick="deletarDocumentoAtual()" style="color: #a00000; font-weight: bold;">Excluir</span>
+            <span onclick="imprimirConteudo()" style="cursor: pointer;">Imprimir</span>
+            <span onclick="deletarDocumentoAtual()" style="color: #a00000; font-weight: bold; cursor: pointer;">Excluir</span>
         </div>
 
         <div class="content-inner-scroll">
@@ -76,6 +82,14 @@
                     </p>
                 </div>
             </div>
+            <div id="editor-container" style="display: none; flex-direction: column; height: 100%;">
+                <div id="quill-editor" style="flex: 1; min-height: 300px;"></div>
+                
+                <div class="editor-buttons" style="padding: 10px; background: #f0f0f0; text-align: right; border-top: 1px solid #ccc;">
+                    <button onclick="salvarEdicaoAtual()" class="btn-salvar" style="padding: 5px 15px;">Salvar</button>
+                    <button onclick="cancelarEdicao()" class="btn-cancelar" style="padding: 5px 15px; margin-left: 5px;">Cancelar</button>
+                </div>
+            </div>
         </div>
 
         <div class="win-statusbar">
@@ -84,9 +98,47 @@
         </div>
     </div>
 
+    <div id="custom-prompt-modal" onclick="if(event.target===this) fecharPromptModal()" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); justify-content:center; align-items:center; z-index:9999;">
+        <div class="win-panel" style="width: 350px;">
+            <div class="win-titlebar">
+                Criar Novo Roteiro
+                <div class="win-titlebar-btns">
+                    <div class="win-btn" title="Fechar" style="color:#c00;" onclick="fecharPromptModal()">✕</div>
+                </div>
+            </div>
+            <div class="win-sidebar-body" style="padding: 15px; background: #f0f0f0;">
+                <div style="margin-bottom: 15px;">
+                    <label for="prompt-title-input" style="font-weight: 500; display: block; margin-bottom: 5px;">Título do Novo Roteiro:</label>
+                    <input type="text" id="prompt-title-input" placeholder="Ex: Como Fazer o Faturamento Cassi" class="input-title">
+                </div>
+                <div style="text-align: right; gap: 5px; display: flex; justify-content: flex-end;">
+                    <button onclick="confirmarCriacaoRoteiro()" class=" btn-salvar" style="padding: 3px 15px; cursor: pointer;">OK</button>
+                    <button onclick="fecharPromptModal()" class=" btn-cancelar" style="padding: 3px 15px; cursor: pointer;">Cancelar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE CONFIRMAÇÃO -->
+    <div id="toast-container"></div>
+
+    <div id="confirm-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-box">
+            <div class="modal-title" id="confirm-title">Confirmação</div>
+            <div class="modal-message" id="confirm-message"></div>
+
+            <div class="modal-actions">
+                <button id="confirm-no">Cancelar</button>
+                <button id="confirm-yes" class="danger">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let artigos = {};
-        let arquiuvoAberto = null;
+        let arquivoAberto = null;
+        let modoCriacao = false;
+        let quill = null;
 
         const welcomeHTML = `
         <div class="welcome-screen" id="welcome-screen">
@@ -94,6 +146,32 @@
             <h1>Central de Roteiros</h1>
             <p>Selecione um roteiro no painel ao lado<br>ou use o campo de busca para encontrar o que precisa.</p>
         </div>`;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            quill = new Quill('#quill-editor', {
+                theme: 'snow',
+                modules: {
+                    // syntax: true,
+                    toolbar: [
+                        [{ 'font': [] }],
+                        [{ 'header': [1, 2, 3, false] }],
+                        ['bold', 'italic', 'underline', 'strike'],
+                        [{ 'color': [] }, { 'background': [] }],
+                        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                        ['blockquote', 'code-block'],
+                        ['image', 'link'],
+                        ['clean']
+                    ]
+                }
+            });
+            carregarDocumentos();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                fecharPromptModal();
+            }
+        });
 
         async function carregarDocumentos() {
             try {
@@ -107,8 +185,11 @@
                 }));
 
                 renderMenu(listaSimples, '');
+
+                return true;
             } catch (err) {
                 console.error("Erro ao carregar documentos:", err);
+                return false;
             }
         }
 
@@ -128,12 +209,12 @@
                     return res.json();
                 })
                 .then(res => {
-                    alert("Upload concluído!");
+                    showToast("Upload concluído!");
                     carregarDocumentos();
                 })
                 .catch(err => {
                     console.error(err);
-                    alert("Erro ao enviar PDF");
+                    showToast("Erro ao enviar PDF");
                 });
         }
 
@@ -144,6 +225,10 @@
             if (!dados) return;
 
             arquivoAberto = file;
+            modoCriacao = false;
+
+            document.getElementById('editor-container').style.display = 'none';
+            document.getElementById('content').style.display = 'block';
 
             document.getElementById('content').innerHTML = dados.html;
             document.getElementById('title-text').textContent = title;
@@ -168,7 +253,6 @@
                     return;
                 }
 
-
                 const res = await fetch('/search?busca=' + encodeURIComponent(termo));
                 const data = await res.json();
 
@@ -176,36 +260,39 @@
             }, 300);
         }
 
-        function deletarDocumentoAtual() {
+        async function deletarDocumentoAtual() {
             if (!arquivoAberto) {
-                alert("Selecione um roteiro primeiro para poder excluí-lo.");
+                showToast("Selecione um roteiro primeiro para poder excluí-lo.");
                 return;
             }
 
-            const confirmacao = confirm(`Tem certeza que deseja apagar permanentemente o roteiro "${artigos[arquivoAberto].titulo}"?`);
+            const confirmacao = await showConfirm(
+                `Tem certeza que deseja apagar permanentemente o roteiro "${artigos[arquivoAberto].titulo}"?`,
+                "Excluir Roteiro"
+            );
+
             if (!confirmacao) return;
 
-            fetch(`/documentos/${encodeURIComponent(arquivoAberto)}`, {
-                method: 'DELETE'
-            })
-                .then(res => {
-                    if (!res.ok) throw new Error("Erro do servidor ao deletar");
-                    return res.json();
-                })
-                .then(data => {
-                    alert("Roteiro removido com sucesso!");
-
-                    arquivoAberto = null;
-                    document.getElementById('content').innerHTML = welcomeHTML;
-                    document.getElementById('title-text').textContent = 'Visualizador de Roteiros';
-                    document.getElementById('status-doc').textContent = 'Nenhum artigo selecionado';
-
-                    carregarDocumentos();
-                })
-                .catch(err => {
-                    console.error(err);
-                    alert("Erro crítico ao tentar remover o documento.");
+            try {
+                const res = await fetch(`/documentos/${encodeURIComponent(arquivoAberto)}`, {
+                    method: 'DELETE'
                 });
+
+                if (!res.ok) throw new Error("Erro do servidor ao deletar");
+
+                showToast("Roteiro removido com sucesso!");
+
+                arquivoAberto = null;
+                document.getElementById('content').innerHTML = welcomeHTML;
+                document.getElementById('title-text').textContent = 'Visualizador de Roteiros';
+                document.getElementById('status-doc').textContent = 'Nenhum artigo selecionado';
+
+                carregarDocumentos();
+
+            } catch (err) {
+                console.error(err);
+                showToast("Erro crítico ao tentar remover o documento.");
+            }
         }
 
         function renderMenu(items, termo) {
@@ -335,10 +422,202 @@
             setTimeout(() => { janela.print(); }, 500);
         }
 
-        window.onload = carregarDocumentos;
+       function ativarModoEdicao() {
+            if (!arquivoAberto) {
+                showToast("Selecione um roteiro na lista antes de tentar editar.");
+                return;
+            }
+
+            modoCriacao = false;
+            const dados = artigos[arquivoAberto];
+            
+            document.getElementById('content').style.display = 'none';
+            document.getElementById('editor-container').style.display = 'flex';
+            
+            quill.clipboard.dangerouslyPasteHTML(dados.html);
+            quill.focus();
+        }
+
+        function criarNovoRoteiro() {
+            document.getElementById('prompt-title-input').value = '';
+            document.getElementById('custom-prompt-modal').style.display = 'flex';
+            setTimeout(() => document.getElementById('prompt-title-input').focus(), 50);
+        }
+
+        function fecharPromptModal() {
+            document.getElementById('custom-prompt-modal').style.display = 'none';
+        }
+
+        function confirmarCriacaoRoteiro() {
+            const tituloRoteiro = document.getElementById('prompt-title-input').value;
+
+            if (!tituloRoteiro || !tituloRoteiro.trim()) {
+                showToast("Por favor, digite um título válido.");
+                return;
+            }
+
+            try {
+                const arquivoNome = tituloRoteiro.toLowerCase()
+                    .replace(/[^a-z0-9]/g, '-')
+                    .replace(/-+/g, '-') + '.html';
+
+                const jaExiste = Object.keys(artigos).some(chave => {
+                    return chave === arquivoNome || artigos[chave].titulo.toLowerCase() === tituloRoteiro.trim().toLowerCase();
+                });
+
+                if (jaExiste) {
+                    showToast(`O roteiro "${tituloRoteiro}" já existe! Escolha outro nome.`);
+                    setTimeout(() => document.getElementById('prompt-title-input').focus(), 50);
+                    return;
+                }
+
+                arquivoAberto = arquivoNome;
+                modoCriacao = true;
+
+                const cw = document.getElementById('content-wrapper');
+                if (cw) {
+                    cw.classList.remove('minimized', 'closed');
+                    cw.style.display = '';
+                    cw.style.flex = '1';
+                }
+
+                document.getElementById('title-text').textContent = `Novo Roteiro: ${tituloRoteiro}`;
+                document.getElementById('status-doc').textContent = `Criando: ${arquivoNome}`;
+                document.getElementById('content').style.display = 'none';
+                document.getElementById('editor-container').style.display = 'flex';
+
+                quill.clipboard.dangerouslyPasteHTML(`<h1>${tituloRoteiro}</h1><p>Comece a escrever seu roteiro aqui...</p>`);
+                quill.focus();
+            } finally {
+                fecharPromptModal();
+            }
+        }
+
+        async function salvarEdicaoAtual() {
+            if (!arquivoAberto) {
+                showToast("Nenhum roteiro ativo detectado.");
+                return;
+            }
+
+            const novoHtml = quill.getSemanticHTML();
+            const tituloVisual = document.getElementById('title-text').textContent.replace("Novo Roteiro: ", "");
+            const endpoint = modoCriacao ? '/documentos' : `/documentos/${encodeURIComponent(arquivoAberto)}`;
+            const metodoHTTP = modoCriacao ? 'POST' : 'PUT';
+
+            const corpoPayload = {
+                html: novoHtml
+            };
+
+            if (modoCriacao) {
+                corpoPayload.arquivo = arquivoAberto;
+                corpoPayload.titulo = tituloVisual;
+            }
+
+            const btnSalvar = document.querySelector("button[onclick='salvarEdicaoAtual()']");
+            const textoOriginal = btnSalvar.innerHTML;
+            btnSalvar.innerHTML = "Salvando...";
+            btnSalvar.disabled = true;
+
+            try {
+                const res = await fetch(endpoint, {
+                    method: metodoHTTP,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(corpoPayload)
+                });
+
+                if (!res.ok) throw new Error("Erro de persistência no servidor.");
+
+                await res.json();
+
+                showToast("Roteiro salvo!");
+
+                document.getElementById('editor-container').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+
+                artigos[arquivoAberto] = {
+                    titulo: tituloVisual,
+                    html: novoHtml,
+                    tipo: modoCriacao ? 'html' : (artigos[arquivoAberto]?.tipo || 'html')
+                };
+
+                await carregarDocumentos();
+
+                const statusDoc = document.getElementById('status-doc');
+                if (statusDoc) {
+                    statusDoc.textContent = tituloVisual;
+                }
+
+            } catch (err) {
+                console.error(err);
+                showToast("Falha crítica ao tentar salvar.");
+            } finally {
+                btnSalvar.innerHTML = textoOriginal;
+                btnSalvar.disabled = false;
+            }
+        }
+
+        function cancelarEdicao() {
+            document.getElementById('editor-container').style.display = 'none';
+            document.getElementById('content').style.display = 'block';
+            
+            if (modoCriacao || !arquivoAberto) {
+                arquivoAberto = null;
+                document.getElementById('content').innerHTML = welcomeHTML;
+                document.getElementById('title-text').textContent = 'Visualizador de Roteiros';
+                document.getElementById('status-doc').textContent = 'Nenhum artigo selecionado';
+            } else {
+                document.getElementById('content').innerHTML = artigos[arquivoAberto].html;
+            }
+            modoCriacao = false;
+        }
+
+        function showToast(message, timeout = 2500) {
+            const container = document.getElementById("toast-container");
+
+            const toast = document.createElement("div");
+            toast.className = "toast";
+            toast.innerText = message;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.remove();
+            }, timeout);
+        }
+
+        function showConfirm(message, title = "Confirmação") {
+            return new Promise((resolve) => {
+                const modal = document.getElementById("confirm-modal");
+                const msg = document.getElementById("confirm-message");
+                const titleEl = document.getElementById("confirm-title");
+
+                const yesBtn = document.getElementById("confirm-yes");
+                const noBtn = document.getElementById("confirm-no");
+
+                titleEl.innerText = title;
+                msg.innerText = message;
+
+                modal.style.display = "flex";
+
+                const cleanup = () => {
+                    modal.style.display = "none";
+                    yesBtn.onclick = null;
+                    noBtn.onclick = null;
+                };
+
+                yesBtn.onclick = () => {
+                    cleanup();
+                    resolve(true);
+                };
+
+                noBtn.onclick = () => {
+                    cleanup();
+                    resolve(false);
+                };
+            });
+        }
+
     </script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
 </body>
 
 </html>

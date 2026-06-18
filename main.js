@@ -26,7 +26,7 @@ function createWindow() {
         title: "Central de Roteiros",
         icon: path.join(__dirname, 'assets', 'tutorial-icon.png'),
         webPreferences: {
-            nodeIntegration: false, // Segurança: Deixe como false já que usamos arquitetura Web/Server
+            nodeIntegration: false,
             contextIsolation: true
         }
     });
@@ -36,6 +36,7 @@ function createWindow() {
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
+    mainWindow.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {

@@ -112,7 +112,10 @@ appExpress.use('/assets', express.static(path.join(__dirname, 'assets')));
 appExpress.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
-appExpress.use(express.json());
+//appExpress.use(express.json());
+
+appExpress.use(express.json({ limit: '50mb' }));
+appExpress.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 /*
 * ROTAS
@@ -160,6 +163,8 @@ appExpress.get('/documentos', (req, res) => {
             if (row.tipo === 'md' && fs.existsSync(caminhoCompleto)) {
                 const markdownBruto = fs.readFileSync(caminhoCompleto, 'utf-8');
                 htmlConteudo = marked.parse(markdownBruto);
+            } else if (row.tipo === 'html' && fs.existsSync(caminhoCompleto)) {
+                htmlConteudo = fs.readFileSync(caminhoCompleto, 'utf-8');
             } else if (row.tipo === 'pdf') {
                 htmlConteudo = `<iframe src="http://localhost:3000/roteiros/${encodeURIComponent(row.arquivo)}" width="100%" height="750px" style="border:none;"></iframe>`;
             }
@@ -220,6 +225,59 @@ appExpress.delete('/documentos/:arquivo', (req, res) => {
     } catch (error) {
         console.error("Erro ao deletar documento:", error);
         res.status(500).json({ error: "Erro interno ao tentar remover o arquivo." });
+    }
+});
+
+appExpress.post('/documentos', (req, res) => {
+    const { arquivo, titulo, html } = req.body;
+
+    if (!arquivo || !titulo || !html) {
+        return res.status(400).json({ error: "Dados incompletos para criação." });
+    }
+
+    try {
+        const caminhoFisico = path.join(ROTEIROS_PATH, arquivo);
+        fs.writeFileSync(caminhoFisico, html, 'utf-8');
+
+        const insertDoc = db.prepare("INSERT INTO documentos (arquivo, tipo, titulo) VALUES (?, ?, ?)");
+        const info = insertDoc.run(arquivo, 'html', titulo);
+        const docId = info.lastInsertRowid;
+        const textoPuro = html.replace(/<[^>]*>/g, ' ');
+        const insertFts = db.prepare("INSERT INTO documentos_busca (documento_id, titulo, conteudo) VALUES (?, ?, ?)");
+        insertFts.run(docId, titulo, textoPuro);
+
+        res.json({ status: "OK", arquivo });
+    } catch (error) {
+        console.error("Erro ao criar roteiro:", error);
+        res.status(500).json({ error: "Erro interno ao criar roteiro." });
+    }
+});
+
+appExpress.put('/documentos/:arquivo', (req, res) => {
+    const nomeArquivo = req.params.arquivo;
+    const { html } = req.body;
+
+    if (!html) {
+        return res.status(400).json({ error: "Conteúdo vazio." });
+    }
+
+    try {
+        const caminhoFisico = path.join(ROTEIROS_PATH, nomeArquivo);
+        fs.writeFileSync(caminhoFisico, html, 'utf-8');
+
+        const doc = db.prepare("SELECT id, titulo FROM documentos WHERE arquivo = ?").get(nomeArquivo);
+        if (!doc) {
+            return res.status(404).json({ error: "Documento não encontrado no banco." });
+        }
+
+        const textoPuro = html.replace(/<[^>]*>/g, ' ');
+        const updateFts = db.prepare("UPDATE documentos_busca SET conteudo = ? WHERE documento_id = ?");
+        updateFts.run(textoPuro, doc.id);
+
+        res.json({ status: "OK", mensagem: "Roteiro atualizado com sucesso." });
+    } catch (error) {
+        console.error("Erro ao atualizar roteiro:", error);
+        res.status(500).json({ error: "Erro interno ao atualizar roteiro." });
     }
 });
 

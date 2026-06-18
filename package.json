@@ -4,7 +4,30 @@
   "description": "",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.central.roteiros",
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/tutorial-icon.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office",
+      "icon": "assets/tutorial-icon.png"
+    },
+    "files": [
+      "**/*",
+      "!node_modules/*",
+      "node_modules/better-sqlite3/**/*"
+    ]
   },
   "keywords": [],
   "author": "",
@@ -12,6 +35,7 @@
   "type": "commonjs",
   "devDependencies": {
     "electron": "^42.4.1",
+    "electron-builder": "^26.15.3",
     "electron-rebuild": "^3.2.9"
   },
   "dependencies": {

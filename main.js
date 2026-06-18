@@ -1,0 +1,62 @@
+const { app, BrowserWindow } = require('electron');
+const { fork } = require('child_process');
+const path = require('path');
+
+let serverProcess = null;
+let mainWindow = null;
+
+function startServer() {
+    const serverPath = path.join(__dirname, 'server.js');
+    
+    serverProcess = fork(serverPath, [`--user-data=${app.getPath('userData')}`]);
+
+    serverProcess.on('error', (err) => {
+        console.error('Falha ao iniciar o processo do servidor Express:', err);
+    });
+
+    serverProcess.on('exit', (code) => {
+        console.log(`Servidor Express finalizou com o código: ${code}`);
+    });
+}
+
+function createWindow() {
+    mainWindow = new BrowserWindow({
+        width: 1200,
+        height: 800,
+        title: "Central de Roteiros",
+        icon: path.join(__dirname, 'assets', 'tutorial-icon.png'),
+        webPreferences: {
+            nodeIntegration: false, // Segurança: Deixe como false já que usamos arquitetura Web/Server
+            contextIsolation: true
+        }
+    });
+
+    mainWindow.setMenu(null);
+    mainWindow.loadURL('http://localhost:3000');
+    mainWindow.on('closed', () => {
+        mainWindow = null;
+    });
+}
+
+app.whenReady().then(() => {
+    startServer();
+    setTimeout(createWindow, 500);
+    app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+});
+
+app.on('window-all-closed', () => {
+    if (serverProcess) {
+        serverProcess.kill();
+    }
+    if (process.platform !== 'darwin') {
+        app.quit();
+    }
+});
+
+app.on('quit', () => {
+    if (serverProcess) {
+        serverProcess.kill();
+    }
+});

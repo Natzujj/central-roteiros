@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Central de Roteiros</title>
+    <link rel="icon" type="image/x-icon" href="/assets/tutorial-icon.png">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="/assets/style.css">
+</head>
+<div id="taskbar"></div>
+
+<body>
+
+    <div id="sidebar" class="win-panel">
+        <div class="win-titlebar" id="sidebar-title" ondblclick="restorePanel('sidebar')">
+            Navegação <img src="/assets/file-con.png" alt="icon" width="12" height="12">
+            <div class="win-titlebar-btns">
+                <div class="win-btn" title="Minimizar" onclick="minimizePanel('sidebar')">_</div>
+                <div class="win-btn" title="Maximizar" onclick="maximizePanel('sidebar')">□</div>
+                <div class="win-btn" title="Fechar" style="color:#c00;" onclick="closePanel('sidebar')">✕</div>
+            </div>
+        </div>
+        <div class="win-menubar">
+            <span onclick="document.getElementById('fileUpload').click()">Novo</span>
+            <input type="file" id="fileUpload" accept="application/pdf" style="display:none" onchange="enviarPDF(this)">
+        </div>
+
+        <div class="win-sidebar-body">
+            <div>
+                <span class="sidebar-search-label"><img src="/assets/search-icon.png" alt="icon" width="14" height="14">
+                    Busca:</span>
+                <input type="text" id="search-box" value="" placeholder="Palavra-chave..."
+                    oninput="filtrarMenu(this.value)">
+            </div>
+
+            <div id="menu-listbox">
+                <div class="listbox-header">Artigos Disponíveis</div>
+                <div id="menu">
+                    <ul id="menu-lista">
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="win-statusbar">
+            <span class="win-status-pane" id="status-count">0 artigos</span>
+        </div>
+    </div>
+
+    <div id="content-wrapper" class="win-panel">
+        <div class="win-titlebar" id="content-title" ondblclick="restorePanel('content-wrapper')">
+            <img src="/assets/file-type.png" alt="icon" width="12" height="12"> <span id="title-text">Visualizador de
+                Roteiros</span>
+            <div class="win-titlebar-btns">
+                <div class="win-btn" title="Minimizar" onclick="minimizePanel('content-wrapper')">_</div>
+                <div class="win-btn" title="Maximizar" onclick="maximizePanel('content-wrapper')">□</div>
+                <div class="win-btn" title="Fechar" style="color:#c00;" onclick="closePanel('content-wrapper')">✕</div>
+            </div>
+        </div>
+        <div class="win-menubar">
+            <span onclick="restorePanel('content-wrapper')">Editar</span>
+            <span>Exibir</span>
+            <span onclick="imprimirConteudo()">Imprimir</span>
+            <span onclick="deletarDocumentoAtual()" style="color: #a00000; font-weight: bold;">Excluir</span>
+        </div>
+
+        <div class="content-inner-scroll">
+            <div id="content">
+                <div class="welcome-screen" id="welcome-screen">
+                    <img src="/assets/lamp-icon.gif" alt="doc" width="112" height="112"
+                        style="border:none; margin:0; box-shadow: none;">
+                    <h1>Central de Roteiros</h1>
+                    <p>Selecione um roteiro no painel ao lado<br>ou use o campo de busca para encontrar o que precisa.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="win-statusbar">
+            <span class="win-status-pane">Pronto</span>
+            <span class="win-status-pane" id="status-doc">Nenhum artigo selecionado</span>
+        </div>
+    </div>
+
+    <script>
+        let artigos = {};
+        let arquiuvoAberto = null;
+
+        const welcomeHTML = `
+        <div class="welcome-screen" id="welcome-screen">
+            <img src="/assets/lamp-icon.gif" alt="doc" width="112" height="112" style="border:none; margin:0;">
+            <h1>Central de Roteiros</h1>
+            <p>Selecione um roteiro no painel ao lado<br>ou use o campo de busca para encontrar o que precisa.</p>
+        </div>`;
+
+        async function carregarDocumentos() {
+            try {
+                const res = await fetch('/documentos');
+                artigos = await res.json();
+
+                const listaSimples = Object.keys(artigos).map(key => ({
+                    arquivo: key,
+                    titulo: artigos[key].titulo,
+                    tipo: artigos[key].tipo
+                }));
+
+                renderMenu(listaSimples, '');
+            } catch (err) {
+                console.error("Erro ao carregar documentos:", err);
+            }
+        }
+
+        function enviarPDF(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append("pdf", file);
+
+            fetch("/upload", {
+                method: "POST",
+                body: formData
+            })
+                .then(res => {
+                    if (!res.ok) throw new Error("Falha no upload");
+                    return res.json();
+                })
+                .then(res => {
+                    alert("Upload concluído!");
+                    carregarDocumentos();
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert("Erro ao enviar PDF");
+                });
+        }
+
+        function abrirDoc(el) {
+            const file = el.dataset.file;
+            const title = el.dataset.title;
+            const dados = artigos[file];
+            if (!dados) return;
+
+            arquivoAberto = file;
+
+            document.getElementById('content').innerHTML = dados.html;
+            document.getElementById('title-text').textContent = title;
+            document.getElementById('status-doc').textContent = title;
+
+            document.querySelectorAll('#menu a').forEach(a => a.classList.remove('active'));
+            el.classList.add('active');
+
+            const cw = document.getElementById('content-wrapper');
+            cw.classList.remove('minimized', 'closed');
+            cw.style.display = '';
+            cw.style.flex = '1';
+        }
+
+        let timeoutBusca = null;
+
+        function filtrarMenu(termo) {
+            clearTimeout(timeoutBusca);
+            timeoutBusca = setTimeout(async () => {
+                if (!termo.trim()) {
+                    carregarDocumentos();
+                    return;
+                }
+
+
+                const res = await fetch('/search?busca=' + encodeURIComponent(termo));
+                const data = await res.json();
+
+                renderMenu(data, termo);
+            }, 300);
+        }
+
+        function deletarDocumentoAtual() {
+            if (!arquivoAberto) {
+                alert("Selecione um roteiro primeiro para poder excluí-lo.");
+                return;
+            }
+
+            const confirmacao = confirm(`Tem certeza que deseja apagar permanentemente o roteiro "${artigos[arquivoAberto].titulo}"?`);
+            if (!confirmacao) return;
+
+            fetch(`/documentos/${encodeURIComponent(arquivoAberto)}`, {
+                method: 'DELETE'
+            })
+                .then(res => {
+                    if (!res.ok) throw new Error("Erro do servidor ao deletar");
+                    return res.json();
+                })
+                .then(data => {
+                    alert("Roteiro removido com sucesso!");
+
+                    arquivoAberto = null;
+                    document.getElementById('content').innerHTML = welcomeHTML;
+                    document.getElementById('title-text').textContent = 'Visualizador de Roteiros';
+                    document.getElementById('status-doc').textContent = 'Nenhum artigo selecionado';
+
+                    carregarDocumentos();
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert("Erro crítico ao tentar remover o documento.");
+                });
+        }
+
+        function renderMenu(items, termo) {
+            const menu = document.getElementById('menu-lista');
+            menu.innerHTML = '';
+
+            items.forEach(item => {
+                const li = document.createElement('li');
+                const a = document.createElement('a');
+                a.href = '#';
+                a.dataset.file = item.arquivo;
+                a.dataset.title = item.titulo;
+
+                a.innerHTML = `
+                    <img src="/assets/file-type.png" width="12" height="12">
+                    ${highlightText(item.titulo, termo)}
+                `;
+
+                a.onclick = function () {
+                    abrirDoc(this);
+                    return false;
+                };
+
+                li.appendChild(a);
+                menu.appendChild(li);
+            });
+
+            document.getElementById('status-count').textContent = items.length + ' artigos';
+        }
+
+        function highlightText(text, term) {
+            if (!term || term.trim() === '') return text;
+            const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(`(${escaped})`, 'gi');
+            return text.replace(regex, '<span class="highlight">$1</span>');
+        }
+
+        function minimizePanel(id) {
+            const panel = document.getElementById(id);
+            const taskbar = document.getElementById('taskbar');
+            if (document.querySelector(`.taskbar-item[data-id="${id}"]`)) {
+                panel.style.display = 'none';
+                return;
+            }
+            const title = panel.querySelector('.win-titlebar').innerText.trim();
+            const item = document.createElement('div');
+            item.className = 'taskbar-item';
+            item.dataset.id = id;
+            item.textContent = title;
+            item.onclick = () => restoreFromTaskbar(id);
+            taskbar.appendChild(item);
+            panel.style.display = 'none';
+        }
+
+        function restoreFromTaskbar(id) {
+            const panel = document.getElementById(id);
+            panel.style.display = '';
+            const item = document.querySelector(`.taskbar-item[data-id="${id}"]`);
+            if (item) item.remove();
+        }
+
+        function maximizePanel(id) {
+            const panel = document.getElementById(id);
+            panel.classList.remove('minimized');
+            panel.classList.toggle('maximized');
+        }
+
+        function restorePanel(id) {
+            const panel = document.getElementById(id);
+            panel.classList.remove('minimized', 'maximized');
+            panel.style.display = '';
+            if (id === 'content-wrapper') panel.style.flex = '1';
+            if (id === 'sidebar') {
+                panel.style.width = '260px';
+                panel.style.flexShrink = '0';
+            }
+        }
+
+        function closePanel(id) {
+            const panel = document.getElementById(id);
+            panel.classList.remove('minimized', 'maximized');
+            const item = document.querySelector(`.taskbar-item[data-id="${id}"]`);
+            if (item) item.remove();
+
+            if (id === 'content-wrapper') {
+                document.getElementById('content').innerHTML = welcomeHTML;
+                document.getElementById('title-text').textContent = 'Visualizador de Roteiros';
+                document.getElementById('status-doc').textContent = 'Nenhum artigo selecionado';
+                document.querySelectorAll('#menu a').forEach(a => a.classList.remove('active'));
+            } else {
+                panel.style.display = 'none';
+            }
+        }
+
+        function imprimirConteudo() {
+            const iframe = document.querySelector('#content iframe');
+            if (iframe) {
+                iframe.contentWindow.focus();
+                iframe.contentWindow.print();
+                return;
+            }
+
+            const conteudo = document.getElementById('content').innerHTML;
+            const titulo = document.getElementById('title-text').textContent;
+            const janela = window.open('', '_blank', 'width=800,height=600');
+            janela.document.write(`
+                <!DOCTYPE html>
+                <html lang="pt-BR">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>${titulo}</title>
+                    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+                    <style>
+                        body { font-family: 'Inter', sans-serif; padding: 40px; color: #000; }
+                        h1 { font-size: 22px; border-bottom: 2px solid #000080; padding-bottom: 8px; }
+                        h2 { font-size: 16px; color: #000080; margin-top: 24px; }
+                        p, ul, ol { font-size: 13px; line-height: 1.65; }
+                        pre { background: #f5f5f5; border-left: 3px solid #000080; padding: 12px; }
+                        img { max-width: 100%; border: 1px solid #ccc; }
+                    </style>
+                </head>
+                <body>${conteudo}</body>
+                </html>
+            `);
+            janela.document.close();
+            janela.focus();
+            setTimeout(() => { janela.print(); }, 500);
+        }
+
+        window.onload = carregarDocumentos;
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+</body>
+
+</html>

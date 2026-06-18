@@ -40,7 +40,8 @@ db.exec(`
     CREATE VIRTUAL TABLE IF NOT EXISTS documentos_busca USING fts5(
         documento_id UNINDEXED,
         titulo,
-        conteudo
+        conteudo,
+        tokenize = "unicode61 remove_diacritics 1"
     );
 `);
 
@@ -121,32 +122,60 @@ appExpress.use(express.urlencoded({ limit: '50mb', extended: true }));
 * ROTAS
 */
 
+const STOPWORDS_PT = new Set([
+    'a', 'o', 'as', 'os', 'um', 'uma', 'uns', 'umas',
+    'de', 'do', 'da', 'dos', 'das', 'em', 'no', 'na', 'nos', 'nas',
+    'por', 'pra', 'para', 'com', 'sem', 'sobre', 'sob', 'entre',
+    'e', 'ou', 'mas', 'que', 'se', 'ao', 'aos', 'à', 'às',
+    'é', 'foi', 'ser', 'está', 'esta', 'este', 'isso', 'isto', 'me',
+    'meu', 'minha', 'seu', 'sua', 'no', 'na', 'pelo', 'pela'
+]);
+ 
+function montarQueryFts(termo) {
+    const palavras = termo
+        .replace(/\s+/g, ' ')
+        .trim()
+        .split(' ')
+        .map(p => p.replace(/"/g, ''))
+        .filter(p => p.length > 0);
+ 
+    if (palavras.length === 0) return '';
+ 
+    const palavrasRelevantes = palavras.filter(p => !STOPWORDS_PT.has(p.toLowerCase()));
+    const palavrasFinais = palavrasRelevantes.length > 0 ? palavrasRelevantes : palavras;
+ 
+    return palavrasFinais.map(p => `${p}*`).join(' OR ');
+}
+ 
 appExpress.get('/search', (req, res) => {
     let termo = (req.query.busca || '').trim();
     if (!termo) {
         return res.json([]);
     }
-
-    termo = termo.replace(/\s+/g, ' ');
-    const palavras = termo.split(' ');
-    termo = palavras.join(' OR ');
-
+ 
+    const termoFts = montarQueryFts(termo);
+    if (!termoFts) {
+        return res.json([]);
+    }
+ 
     try {
         const stmt = db.prepare(`
             SELECT 
                 d.arquivo,
                 d.titulo,
                 d.tipo,
-                bm25(documentos_busca) AS score
+                bm25(documentos_busca, 5.0, 1.0) AS score
             FROM documentos d
             JOIN documentos_busca b ON d.id = b.documento_id
             WHERE documentos_busca MATCH ?
-            ORDER BY score ASC
+            ORDER BY score ASC -- O BM25 retorna valores negativos, quanto menor, melhor o match
             LIMIT 50
         `);
-        const result = stmt.all(termo);
+        
+        const result = stmt.all(termoFts);
         res.json(result);
     } catch (error) {
+        console.error("Erro na busca:", error);
         res.status(500).json({ error: "Erro interno ao buscar" });
     }
 });

@@ -678,3 +678,30 @@
     color: #fff;
 }
 
+#quill-editor {
+    width: 100% !important;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.ql-editor img {
+    max-width: 100% !important;
+    height: auto !important;
+}
+
+.ql-editor table {
+    width: 100% !important;
+    max-width: 100% !important;
+    table-layout: fixed; 
+}
+
+#content {
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+}
+
+#content img {
+    max-width: 100% !important;
+    height: auto !important;
+}

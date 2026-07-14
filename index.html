@@ -21,7 +21,8 @@
 
     <div id="sidebar" class="win-panel">
         <div class="win-titlebar" id="sidebar-title">
-            <span id="sidebar-title-text">Navegação (Roteiros)</span> <img src="/assets/file-con.png" alt="icon" width="12" height="12">
+            <span id="sidebar-title-text">Navegação (Roteiros)</span> 
+            <img src="/assets/file-con.png" alt="icon" width="12" height="12">
         </div>
         <div class="win-menubar">
             <div class="win-menu-item-container">
@@ -34,22 +35,21 @@
             </div>
             <span onclick="criarNovoRoteiro()" style="font-weight: bold; color: #006600; cursor: pointer;">[+] Criar</span>
             <span onclick="document.getElementById('fileUpload').click()" style="cursor: pointer;">Enviar</span>
-            <input type="file" id="fileUpload" accept="application/pdf" style="display:none" onchange="enviarPDF(this)">
+            <input type="file" id="fileUpload" accept="application/pdf, text/html, .html, .md, text/markdown" style="display:none" onchange="enviarArquivo(this)">
         </div>
 
         <div class="win-sidebar-body">
             <div>
-                <span class="sidebar-search-label"><img src="/assets/search-icon.png" alt="icon" width="14" height="14">
-                    Busca:</span>
-                <input type="text" id="search-box" value="" placeholder="Palavra-chave..."
-                    oninput="filtrarMenu(this.value)">
+                <span class="sidebar-search-label">
+                    <img src="/assets/search-icon.png" alt="icon" width="14" height="14"> Busca:
+                </span>
+                <input type="text" id="search-box" value="" placeholder="Palavra-chave..." oninput="filtrarMenu(this.value)">
             </div>
 
             <div id="menu-listbox">
                 <div class="listbox-header" id="sidebar-listbox-header">Artigos Disponíveis</div>
                 <div id="menu">
-                    <ul id="menu-lista">
-                    </ul>
+                    <ul id="menu-lista"></ul>
                 </div>
             </div>
         </div>
@@ -61,7 +61,8 @@
 
     <div id="content-wrapper" class="win-panel">
         <div class="win-titlebar" id="content-title">
-            <img src="/assets/file-type.png" alt="icon" width="12" height="12"> <span id="title-text">Visualizador</span>
+            <img src="/assets/file-type.png" alt="icon" width="12" height="12"> 
+            <span id="title-text">Visualizador</span>
         </div>
         <div class="win-menubar">
             <span onclick="ativarModoEdicao()" style="font-weight: bold; cursor: pointer;">Editar</span>
@@ -72,8 +73,7 @@
         <div class="content-inner-scroll">
             <div id="content">
                 <div class="welcome-screen" id="welcome-screen">
-                    <img src="/assets/lamp-icon.gif" alt="doc" width="112" height="112"
-                        style="border:none; margin:0; box-shadow: none !important;">
+                    <img src="/assets/lamp-icon.gif" alt="doc" width="112" height="112" style="border:none; margin:0; box-shadow: none !important;">
                     <h1 id="welcome-title">Central de Roteiros</h1>
                     <p id="welcome-desc">Selecione um roteiro no painel ao lado<br>ou use o campo de busca para encontrar o que precisa.</p>
                 </div>
@@ -108,14 +108,43 @@
                     <input type="text" id="prompt-title-input" placeholder="Ex: Como Fazer o Faturamento Cassi" class="input-title">
                 </div>
                 <div style="text-align: right; gap: 5px; display: flex; justify-content: flex-end;">
-                    <button onclick="confirmarCriacaoRoteiro()" class=" btn-salvar" style="padding: 3px 15px; cursor: pointer;">OK</button>
-                    <button onclick="fecharPromptModal()" class=" btn-cancelar" style="padding: 3px 15px; cursor: pointer;">Cancelar</button>
+                    <button onclick="confirmarCriacaoRoteiro()" class="btn-salvar" style="padding: 3px 15px; cursor: pointer;">OK</button>
+                    <button onclick="fecharPromptModal()" class="btn-cancelar" style="padding: 3px 15px; cursor: pointer;">Cancelar</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- MODAL DE CONFIRMAÇÃO -->
+    <div id="rename-modal" onclick="if(event.target===this) fecharRenameModal()" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); justify-content:center; align-items:center; z-index:9999;">
+        <div class="win-panel" style="width: 350px;">
+            <div class="win-titlebar">
+                Renomear Item
+                <div class="win-titlebar-btns">
+                    <div class="win-btn" title="Fechar" style="color:#c00;" onclick="fecharRenameModal()">✕</div>
+                </div>
+            </div>
+            <div class="win-sidebar-body" style="padding: 15px; background: #f0f0f0;">
+                <div style="margin-bottom: 15px;">
+                    <label for="rename-title-input" style="font-weight: 500; display: block; margin-bottom: 5px;">Novo título do arquivo:</label>
+                    <input type="text" id="rename-title-input" class="input-title">
+                </div>
+                <div style="text-align: right; gap: 5px; display: flex; justify-content: flex-end;">
+                    <button onclick="confirmarRenomear()" class="btn-salvar" style="padding: 3px 15px; cursor: pointer;">Salvar</button>
+                    <button onclick="fecharRenameModal()" class="btn-cancelar" style="padding: 3px 15px; cursor: pointer;">Cancelar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="context-menu" class="context-menu">
+        <div class="context-menu-item" onclick="executarRenomearContexto()">
+            Renomear
+        </div>
+        <div class="context-menu-item" onclick="executarExcluirContexto()" style="color: #a00000; font-weight: bold;">
+            Excluir
+        </div>
+    </div>
+
     <div id="toast-container"></div>
 
     <div id="confirm-modal" class="modal-overlay" style="display:none;">
@@ -136,6 +165,7 @@
         let modoCriacao = false;
         let quill = null;
         let abaAtiva = 'roteiros';
+        let itemContextoTarget = null; 
 
         const welcomeHTML = `
         <div class="welcome-screen" id="welcome-screen">
@@ -148,7 +178,7 @@
             quill = new Quill('#quill-editor', {
                 theme: 'snow',
                 modules: {
-                syntax: true, 
+                    syntax: true, 
                     toolbar: [
                         [{ 'font': [] }],
                         [{ 'header': [1, 2, 3, false] }],
@@ -163,6 +193,27 @@
                 }
             });
             carregarDocumentos();
+
+            document.getElementById('menu-lista').addEventListener('contextmenu', (e) => {
+                const link = e.target.closest('a');
+                if (!link) return;
+
+                e.preventDefault();
+                itemContextoTarget = {
+                    arquivo: link.dataset.file,
+                    titulo: link.dataset.title
+                };
+
+                const menu = document.getElementById('context-menu');
+                menu.style.display = 'block';
+                menu.style.left = `${e.pageX}px`;
+                menu.style.top = `${e.pageY}px`;
+            });
+
+            window.addEventListener('click', () => {
+                document.getElementById('context-menu').style.style = 'none';
+                document.getElementById('context-menu').style.display = 'none';
+            });
         });
 
         window.addEventListener('click', (e) => {
@@ -180,6 +231,7 @@
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 fecharPromptModal();
+                fecharRenameModal();
             }
         });
 
@@ -228,58 +280,91 @@
             }
         }
 
-        function enviarPDF(input) {
+        function enviarArquivo(input) {
             const file = input.files[0];
             if (!file) return;
 
-            const formData = new FormData();
-            formData.append("pdf", file);
-            formData.append("categoria", abaAtiva); 
+            const ext = file.name.split('.').pop().toLowerCase();
 
-            fetch("/upload", {
-                method: "POST",
-                body: formData
-            })
+            if (ext === 'html' || ext === 'htm' || ext === 'md') {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const conteudo = e.target.result;
+                    let htmlConvertido = conteudo;
+
+                    if (ext === 'md') {
+                        htmlConvertido = converterMarkdownParaHtml(conteudo);
+                    }
+
+                    const tituloSugerido = file.name.replace(/\.[^/.]+$/, ""); 
+                    
+                    arquivoAberto = tituloSugerido.toLowerCase()
+                        .normalize('NFD') 
+                        .replace(/[\u0300-\u036f]/g, "") 
+                        .replace(/[^a-z0-9]/g, '-')
+                        .replace(/-+/g, '-') + '.html';
+                        
+                    modoCriacao = true;
+
+                    const cw = document.getElementById('content-wrapper');
+                    if (cw) {
+                        cw.style.display = '';
+                        cw.style.flex = '1';
+                    }
+
+                    const labelsVisual = { 'roteiros': 'Roteiro', 'emails': 'E-mail', 'sql': 'SQL' };
+                    document.getElementById('title-text').textContent = `Novo ${labelsVisual[abaAtiva] || 'Item'}: ${tituloSugerido}`;
+                    document.getElementById('status-doc').textContent = `Criando: ${arquivoAberto}`;
+                    document.getElementById('content').style.display = 'none';
+                    document.getElementById('editor-container').style.display = 'flex';
+
+                    quill.clipboard.dangerouslyPasteHTML(htmlConvertido);
+                    quill.focus();
+                    showToast("Arquivo importado com sucesso! Revise e clique em Salvar.");
+                };
+                reader.readAsText(file);
+            } else {
+                const formData = new FormData();
+                formData.append("pdf", file);
+                formData.append("categoria", abaAtiva); 
+
+                fetch("/upload", {
+                    method: "POST",
+                    body: formData
+                })
                 .then(res => {
                     if (!res.ok) throw new Error("Falha no upload");
                     return res.json();
                 })
                 .then(res => {
-                    showToast("Upload concluído!");
+                    showToast("Upload do PDF concluído!");
                     carregarDocumentos();
                 })
                 .catch(err => {
                     console.error(err);
                     showToast("Erro ao enviar PDF");
                 });
+            }
+            
+            input.value = ''; 
         }
-
-        // function abrirDoc(el) {
-        //     const file = el.dataset.file;
-        //     const title = el.dataset.title;
-        //     const dados = artigos[file];
-        //     if (!dados) return;
-
-        //     arquivoAberto = file;
-        //     modoCriacao = false;
-
-        //     document.getElementById('editor-container').style.display = 'none';
-        //     document.getElementById('content').style.display = 'block';
-
-        //     document.getElementById('content').innerHTML = dados.html;
-        //     document.querySelectorAll('#content pre code').forEach((el) => {
-        //         hljs.highlightElement(el);
-        //     });
-        //     document.getElementById('title-text').textContent = title;
-        //     document.getElementById('status-doc').textContent = title;
-
-        //     document.querySelectorAll('#menu a').forEach(a => a.classList.remove('active'));
-        //     el.classList.add('active');
-
-        //     const cw = document.getElementById('content-wrapper');
-        //     cw.style.display = '';
-        //     cw.style.flex = '1';
-        // }
+        // TROCAR FUTURAMENTE PARA UM CONVERSOR DE VERDADE, ISSO AQUI É SAFADEZA DEMAIS
+        function converterMarkdownParaHtml(md) {
+            return md
+                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+                .replace(/^\* (.*$)/gim, '<ul><li>$1</li></ul>') 
+                .replace(/^- (.*$)/gim, '<ul><li>$1</li></ul>')
+                .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
+                .replace(/\*(.*)\*/gim, '<em>$1</em>')
+                .replace(/\n$/gim, '<br>')
+                .split('\n').map(line => {
+                    if (!line.trim()) return '';
+                    if (line.match(/^<h/i) || line.match(/^<ul/i)) return line;
+                    return `<p>${line}</p>`;
+                }).join('');
+        }
 
         function abrirDoc(el) {
             const file = el.dataset.file;
@@ -345,16 +430,19 @@
                 showToast(`Selecione um ${singulares[abaAtiva] || 'item'} primeiro para poder excluí-lo.`);
                 return;
             }
+            await executarExclusaoPorParametro(arquivoAberto, artigos[arquivoAberto].titulo);
+        }
 
+        async function executarExclusaoPorParametro(arquivo, titulo) {
             const confirmacao = await showConfirm(
-                `Tem certeza que deseja apagar permanentemente este item "${artigos[arquivoAberto].titulo}"?`,
+                `Tem certeza que deseja apagar permanentemente este item "${titulo}"?`,
                 "Excluir Item"
             );
 
             if (!confirmacao) return;
 
             try {
-                const res = await fetch(`/documentos/${encodeURIComponent(arquivoAberto)}?categoria=${abaAtiva}`, {
+                const res = await fetch(`/documentos/${encodeURIComponent(arquivo)}?categoria=${abaAtiva}`, {
                     method: 'DELETE'
                 });
 
@@ -362,10 +450,10 @@
 
                 showToast("Item removido com sucesso!");
 
-                arquivoAberto = null;
-                document.getElementById('content').innerHTML = welcomeHTML;
-
-                mudarAbaLateral(abaAtiva, document.getElementById('sidebar-title-text').textContent.replace("Navegação (", "").replace(")", ""), document.getElementById('sidebar-listbox-header').textContent);
+                if (arquivoAberto === arquivo) {
+                    arquivoAberto = null;
+                    document.getElementById('content').innerHTML = welcomeHTML;
+                }
 
                 carregarDocumentos();
 
@@ -392,7 +480,7 @@
 
                 a.innerHTML = `
                     <img src="${icone}" width="12" height="12" onerror="this.src='/assets/file-type.png'">
-                    ${highlightText(item.titulo, termo)}
+                    <span class="item-text-span">${highlightText(item.titulo, termo)}</span>
                 `;
 
                 a.onclick = function () {
@@ -450,7 +538,7 @@
             setTimeout(() => { janela.print(); }, 500);
         }
 
-       function ativarModoEdicao() {
+        function ativarModoEdicao() {
             if (!arquivoAberto) {
                 const singulares = { 'roteiros': 'roteiro', 'emails': 'e-mail', 'sql': 'script SQL' };
                 showToast(`Selecione um ${singulares[abaAtiva] || 'item'} na lista antes de tentar editar.`);
@@ -500,6 +588,8 @@
 
             try {
                 const arquivoNome = tituloRoteiro.toLowerCase()
+                    .normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, "")
                     .replace(/[^a-z0-9]/g, '-')
                     .replace(/-+/g, '-') + '.html';
 
@@ -616,6 +706,63 @@
             modoCriacao = false;
         }
 
+        function executarRenomearContexto() {
+            if (!itemContextoTarget) return;
+            document.getElementById('rename-title-input').value = itemContextoTarget.titulo;
+            document.getElementById('rename-modal').style.display = 'flex';
+            setTimeout(() => document.getElementById('rename-title-input').focus(), 50);
+        }
+
+        function fecharRenameModal() {
+            document.getElementById('rename-modal').style.display = 'none';
+        }
+
+        async function confirmarRenomear() {
+            const novoTitulo = document.getElementById('rename-title-input').value;
+            if (!novoTitulo || !novoTitulo.trim()) {
+                showToast("O título não pode estar vazio.");
+                return;
+            }
+
+            const target = itemContextoTarget;
+            if (!target) return;
+
+            try {
+                const res = await fetch(`/documentos/${encodeURIComponent(target.arquivo)}/titulo?categoria=${abaAtiva}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ novoTitulo: novoTitulo.trim() })
+                });
+
+                if (!res.ok) {
+                    const errObj = await res.json();
+                    throw new Error(errObj.error || "Erro de persistência.");
+                }
+
+                showToast("Título atualizado!");
+                fecharRenameModal();
+
+                if (artigos[target.arquivo]) {
+                    artigos[target.arquivo].titulo = novoTitulo.trim();
+                }
+
+                if (arquivoAberto === target.arquivo) {
+                    document.getElementById('title-text').textContent = novoTitulo.trim();
+                    document.getElementById('status-doc').textContent = novoTitulo.trim();
+                }
+
+                await carregarDocumentos();
+            } catch (error) {
+                console.error(error);
+                showToast(error.message || "Falha ao renomear item.");
+            }
+        }
+
+        function executarExcluirContexto() {
+            if (!itemContextoTarget) return;
+            executarExclusaoPorParametro(itemContextoTarget.arquivo, itemContextoTarget.titulo);
+        }
+
         function showToast(message, timeout = 2500) {
             const container = document.getElementById("toast-container");
 
@@ -661,7 +808,6 @@
                 };
             });
         }
-
     </script>
 </body>
 

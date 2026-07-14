@@ -748,3 +748,33 @@
     font-weight: bold;
     margin-left: 8px;
 }
+
+.context-menu {
+    display: none;
+    position: absolute;
+    z-index: 10000;
+    background: #f0f0f0;
+    border: 2px solid;
+    border-color: #fff #808080 #808080 #fff;
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.4);
+    padding: 2px;
+    min-width: 130px;
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+}
+.context-menu-item {
+    padding: 5px 10px;
+    cursor: pointer;
+    color: #000;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.context-menu-item:hover {
+    background-color: #000080;
+    color: #fff;
+}
+/* Para destacar que a lista aceita clique direito */
+#menu-lista li a {
+    user-select: none;
+}

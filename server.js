@@ -333,6 +333,38 @@ appExpress.put('/documentos/:arquivo', (req, res) => {
     }
 });
 
+/*
+* ATUALIZAR APENAS O TÍTULO (PATCH)
+*/
+appExpress.patch('/documentos/:arquivo/titulo', (req, res) => {
+    const nomeArquivo = req.params.arquivo;
+    const { novoTitulo } = req.body;
+    const categoria = req.query.categoria || 'roteiros';
+
+    if (!novoTitulo || !novoTitulo.trim()) {
+        return res.status(400).json({ error: "O novo título não pode ser vazio." });
+    }
+
+    try {
+        const doc = db.prepare("SELECT id FROM documentos WHERE arquivo = ? AND categoria = ?").get(nomeArquivo, categoria);
+        if (!doc) {
+            return res.status(404).json({ error: "Documento não encontrado." });
+        }
+
+        const atualizarTituloTransacao = db.transaction(() => {
+            db.prepare("UPDATE documentos SET titulo = ? WHERE id = ?").run(novoTitulo.trim(), doc.id);
+            db.prepare("UPDATE documentos_busca SET titulo = ? WHERE documento_id = ?").run(novoTitulo.trim(), doc.id);
+        });
+
+        atualizarTituloTransacao();
+        console.log(`[Server] Título atualizado para "${novoTitulo}" no arquivo ${nomeArquivo}`);
+        res.json({ status: "OK", mensagem: "Título atualizado com sucesso." });
+    } catch (error) {
+        console.error("Erro ao renomear título:", error);
+        res.status(500).json({ error: "Erro interno ao tentar renomear o item." });
+    }
+});
+
 const PORT = 3000;
 appExpress.listen(PORT, () => {
     console.log(`Server rodando na porta ${PORT}`);

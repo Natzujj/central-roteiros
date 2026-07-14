@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, dialog } = require('electron');
 const { fork } = require('child_process');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
@@ -10,7 +10,6 @@ autoUpdater.autoDownload = false;
 
 function startServer() {
     const serverPath = path.join(__dirname, 'server.js');
-    
     serverProcess = fork(serverPath, [`--user-data=${app.getPath('userData')}`]);
 
     serverProcess.on('error', (err) => {
@@ -36,13 +35,19 @@ function createWindow() {
 
     mainWindow.setMenu(null);
     mainWindow.loadURL('http://localhost:3000');
+
+    mainWindow.webContents.once('did-finish-load', () => {
+        if (app.isPackaged) {
+            autoUpdater.checkForUpdates();
+        }
+    });
+
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
 
     mainWindow.webContents.on('before-input-event', (event, input) => {
         if (input.type === 'keyDown' && input.key === 'F12') {
-
             if (mainWindow.webContents.isDevToolsOpened()) {
                 mainWindow.webContents.closeDevTools();
             } else {
@@ -50,7 +55,6 @@ function createWindow() {
                     mode: 'detach'
                 });
             }
-
             event.preventDefault();
         }
     });
@@ -59,9 +63,7 @@ function createWindow() {
 app.whenReady().then(() => {
     startServer();
     setTimeout(createWindow, 500);
-    if (app.isPackaged) {
-        autoUpdater.checkForUpdates();
-    }
+    
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
@@ -84,10 +86,9 @@ app.on('quit', () => {
 
 /*
  * ==========================================
- *          AUTO UPDATER
+ *          AUTO UPDATER 
  * ==========================================
  */
-
 autoUpdater.on('update-available', (info) => {
     dialog.showMessageBox({
         type: 'info',
@@ -116,6 +117,7 @@ autoUpdater.on('update-downloaded', () => {
         autoUpdater.quitAndInstall();
     });
 });
+
 autoUpdater.on('error', (err) => {
     console.error('Erro no atualizador automático:', err);
 });

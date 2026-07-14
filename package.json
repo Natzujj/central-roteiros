@@ -9,6 +9,13 @@
   },
   "build": {
     "appId": "com.central.roteiros",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Natzujj",
+        "repo": "central-roteiros"
+      }
+    ],
     "win": {
       "target": [
         "nsis"
@@ -40,6 +47,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",
+    "electron-updater": "^6.8.9",
     "express": "^5.2.1",
     "marked": "^18.0.5",
     "multer": "^2.2.0",

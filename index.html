@@ -8,8 +8,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" rel="stylesheet">
     <link rel="stylesheet" href="/assets/style.css">
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
@@ -26,8 +28,8 @@
                 <span onclick="toggleDropdown(event)" style="cursor: pointer; font-weight: 500; display: inline-block;">Exibir ▾</span>
                 <div id="dropdown-exibir" class="win-dropdown-menu">
                     <div class="win-dropdown-item active-check" id="opt-roteiros" onclick="mudarAbaLateral('roteiros', 'Roteiros', 'Artigos Disponíveis')">Roteiros</div>
-                    <div class="win-dropdown-item" id="opt-emails" onclick="mudarAbaLateral('emails', 'Sugestões de E-mail', 'Modelos de E-mail')">Sugestões de E-mail</div>
-                    <div class="win-dropdown-item" id="opt-sql" onclick="mudarAbaLateral('sql', 'Sugestões de SQL', 'Queries Disponíveis')">Sugestões de SQL</div>
+                    <div class="win-dropdown-item" id="opt-emails" onclick="mudarAbaLateral('emails', 'E-mail', 'Modelos de E-mail')">Sugestões de E-mail</div>
+                    <div class="win-dropdown-item" id="opt-sql" onclick="mudarAbaLateral('sql', 'SQL', 'Queries Disponíveis')">Sugestões de SQL</div>
                 </div>
             </div>
             <span onclick="criarNovoRoteiro()" style="font-weight: bold; color: #006600; cursor: pointer;">[+] Criar</span>
@@ -146,6 +148,7 @@
             quill = new Quill('#quill-editor', {
                 theme: 'snow',
                 modules: {
+                syntax: true, 
                     toolbar: [
                         [{ 'font': [] }],
                         [{ 'header': [1, 2, 3, false] }],
@@ -251,6 +254,33 @@
                 });
         }
 
+        // function abrirDoc(el) {
+        //     const file = el.dataset.file;
+        //     const title = el.dataset.title;
+        //     const dados = artigos[file];
+        //     if (!dados) return;
+
+        //     arquivoAberto = file;
+        //     modoCriacao = false;
+
+        //     document.getElementById('editor-container').style.display = 'none';
+        //     document.getElementById('content').style.display = 'block';
+
+        //     document.getElementById('content').innerHTML = dados.html;
+        //     document.querySelectorAll('#content pre code').forEach((el) => {
+        //         hljs.highlightElement(el);
+        //     });
+        //     document.getElementById('title-text').textContent = title;
+        //     document.getElementById('status-doc').textContent = title;
+
+        //     document.querySelectorAll('#menu a').forEach(a => a.classList.remove('active'));
+        //     el.classList.add('active');
+
+        //     const cw = document.getElementById('content-wrapper');
+        //     cw.style.display = '';
+        //     cw.style.flex = '1';
+        // }
+
         function abrirDoc(el) {
             const file = el.dataset.file;
             const title = el.dataset.title;
@@ -262,8 +292,23 @@
 
             document.getElementById('editor-container').style.display = 'none';
             document.getElementById('content').style.display = 'block';
+            const contentDiv = document.getElementById('content');
+            
+            contentDiv.innerHTML = dados.html;
+            contentDiv.querySelectorAll('pre[data-language]').forEach((pre) => {
+                if (pre.querySelector('code')) return; 
 
-            document.getElementById('content').innerHTML = dados.html;
+                const language = pre.getAttribute('data-language') || 'plaintext';
+                const codeText = pre.textContent; 
+
+                pre.innerHTML = `<code class="language-${language}"></code>`;
+                pre.querySelector('code').textContent = codeText; 
+            });
+
+            contentDiv.querySelectorAll('pre code').forEach((codeBlock) => {
+                hljs.highlightElement(codeBlock);
+            });
+
             document.getElementById('title-text').textContent = title;
             document.getElementById('status-doc').textContent = title;
 
@@ -271,8 +316,10 @@
             el.classList.add('active');
 
             const cw = document.getElementById('content-wrapper');
-            cw.style.display = '';
-            cw.style.flex = '1';
+            if (cw) {
+                cw.style.display = '';
+                cw.style.flex = '1';
+            }
         }
 
         let timeoutBusca = null;
@@ -341,7 +388,7 @@
 
                 let icone = '/assets/file-type.png';
                 if (abaAtiva === 'sql') icone = '/assets/database-icon.png'; 
-                if (abaAtiva === 'emails') icone = '/assets/mail-icon.png';
+                if (abaAtiva === 'emails') icone = '/assets/mail-icon.webp';
 
                 a.innerHTML = `
                     <img src="${icone}" width="12" height="12" onerror="this.src='/assets/file-type.png'">
@@ -495,6 +542,7 @@
             }
 
             const novoHtml = quill.getSemanticHTML();
+            console.log(novoHtml);
             const prefixoRemover = ["Novo Roteiro: ", "Novo E-mail: ", "Novo SQL: "];
             let tituloVisual = document.getElementById('title-text').textContent;
             prefixoRemover.forEach(pfx => { tituloVisual = tituloVisual.replace(pfx, ""); });

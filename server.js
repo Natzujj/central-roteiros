@@ -310,6 +310,12 @@ appExpress.put('/documentos/:arquivo', (req, res) => {
             return res.status(404).json({ error: "Documento não encontrado no banco." });
         }
 
+        if (doc.tipo === 'pdf') {
+            return res.status(400).json({ 
+                error: "Não é possível editar o arquivo PDF original diretamente. Crie uma cópia em formato de texto para editá-lo." 
+            });
+        }
+
         const textoPuro = html.replace(/<[^>]*>/g, ' ');
 
         const atualizarTransacao = db.transaction(() => {

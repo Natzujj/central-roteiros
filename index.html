@@ -16,20 +16,22 @@
 </head>
 
 <body>
-    <div id="taskbar"></div>
 
     <div id="sidebar" class="win-panel">
-        <div class="win-titlebar" id="sidebar-title" ondblclick="restorePanel('sidebar')">
-            Navegação <img src="/assets/file-con.png" alt="icon" width="12" height="12">
-            <div class="win-titlebar-btns">
-                <div class="win-btn" title="Minimizar" onclick="minimizePanel('sidebar')">_</div>
-                <div class="win-btn" title="Maximizar" onclick="maximizePanel('sidebar')">□</div>
-                <div class="win-btn" title="Fechar" style="color:#c00;" onclick="closePanel('sidebar')">✕</div>
-            </div>
+        <div class="win-titlebar" id="sidebar-title">
+            <span id="sidebar-title-text">Navegação (Roteiros)</span> <img src="/assets/file-con.png" alt="icon" width="12" height="12">
         </div>
         <div class="win-menubar">
+            <div class="win-menu-item-container">
+                <span onclick="toggleDropdown(event)" style="cursor: pointer; font-weight: 500; display: inline-block;">Exibir ▾</span>
+                <div id="dropdown-exibir" class="win-dropdown-menu">
+                    <div class="win-dropdown-item active-check" id="opt-roteiros" onclick="mudarAbaLateral('roteiros', 'Roteiros', 'Artigos Disponíveis')">Roteiros</div>
+                    <div class="win-dropdown-item" id="opt-emails" onclick="mudarAbaLateral('emails', 'Sugestões de E-mail', 'Modelos de E-mail')">Sugestões de E-mail</div>
+                    <div class="win-dropdown-item" id="opt-sql" onclick="mudarAbaLateral('sql', 'Sugestões de SQL', 'Queries Disponíveis')">Sugestões de SQL</div>
+                </div>
+            </div>
             <span onclick="criarNovoRoteiro()" style="font-weight: bold; color: #006600; cursor: pointer;">[+] Criar</span>
-            <span onclick="document.getElementById('fileUpload').click()" style="cursor: pointer;">Novo</span>
+            <span onclick="document.getElementById('fileUpload').click()" style="cursor: pointer;">Enviar</span>
             <input type="file" id="fileUpload" accept="application/pdf" style="display:none" onchange="enviarPDF(this)">
         </div>
 
@@ -42,7 +44,7 @@
             </div>
 
             <div id="menu-listbox">
-                <div class="listbox-header">Artigos Disponíveis</div>
+                <div class="listbox-header" id="sidebar-listbox-header">Artigos Disponíveis</div>
                 <div id="menu">
                     <ul id="menu-lista">
                     </ul>
@@ -51,23 +53,16 @@
         </div>
 
         <div class="win-statusbar">
-            <span class="win-status-pane" id="status-count">0 artigos</span>
+            <span class="win-status-pane" id="status-count">0 itens</span>
         </div>
     </div>
 
     <div id="content-wrapper" class="win-panel">
-        <div class="win-titlebar" id="content-title" ondblclick="restorePanel('content-wrapper')">
-            <img src="/assets/file-type.png" alt="icon" width="12" height="12"> <span id="title-text">Visualizador de
-                Roteiros</span>
-            <div class="win-titlebar-btns">
-                <div class="win-btn" title="Minimizar" onclick="minimizePanel('content-wrapper')">_</div>
-                <div class="win-btn" title="Maximizar" onclick="maximizePanel('content-wrapper')">□</div>
-                <div class="win-btn" title="Fechar" style="color:#c00;" onclick="closePanel('content-wrapper')">✕</div>
-            </div>
+        <div class="win-titlebar" id="content-title">
+            <img src="/assets/file-type.png" alt="icon" width="12" height="12"> <span id="title-text">Visualizador</span>
         </div>
         <div class="win-menubar">
             <span onclick="ativarModoEdicao()" style="font-weight: bold; cursor: pointer;">Editar</span>
-            <span>Exibir</span>
             <span onclick="imprimirConteudo()" style="cursor: pointer;">Imprimir</span>
             <span onclick="deletarDocumentoAtual()" style="color: #a00000; font-weight: bold; cursor: pointer;">Excluir</span>
         </div>
@@ -76,10 +71,9 @@
             <div id="content">
                 <div class="welcome-screen" id="welcome-screen">
                     <img src="/assets/lamp-icon.gif" alt="doc" width="112" height="112"
-                        style="border:none; margin:0; box-shadow: none;">
-                    <h1>Central de Roteiros</h1>
-                    <p>Selecione um roteiro no painel ao lado<br>ou use o campo de busca para encontrar o que precisa.
-                    </p>
+                        style="border:none; margin:0; box-shadow: none !important;">
+                    <h1 id="welcome-title">Central de Roteiros</h1>
+                    <p id="welcome-desc">Selecione um roteiro no painel ao lado<br>ou use o campo de busca para encontrar o que precisa.</p>
                 </div>
             </div>
             <div id="editor-container" style="display: none; flex-direction: column; height: 100%;">
@@ -94,21 +88,21 @@
 
         <div class="win-statusbar">
             <span class="win-status-pane">Pronto</span>
-            <span class="win-status-pane" id="status-doc">Nenhum artigo selecionado</span>
+            <span class="win-status-pane" id="status-doc">Nenhum item selecionado</span>
         </div>
     </div>
 
     <div id="custom-prompt-modal" onclick="if(event.target===this) fecharPromptModal()" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); justify-content:center; align-items:center; z-index:9999;">
         <div class="win-panel" style="width: 350px;">
             <div class="win-titlebar">
-                Criar Novo Roteiro
+                Criar Novo Item
                 <div class="win-titlebar-btns">
                     <div class="win-btn" title="Fechar" style="color:#c00;" onclick="fecharPromptModal()">✕</div>
                 </div>
             </div>
             <div class="win-sidebar-body" style="padding: 15px; background: #f0f0f0;">
                 <div style="margin-bottom: 15px;">
-                    <label for="prompt-title-input" style="font-weight: 500; display: block; margin-bottom: 5px;">Título do Novo Roteiro:</label>
+                    <label for="prompt-title-input" id="modal-label-title" style="font-weight: 500; display: block; margin-bottom: 5px;">Título do Novo Roteiro:</label>
                     <input type="text" id="prompt-title-input" placeholder="Ex: Como Fazer o Faturamento Cassi" class="input-title">
                 </div>
                 <div style="text-align: right; gap: 5px; display: flex; justify-content: flex-end;">
@@ -139,32 +133,45 @@
         let arquivoAberto = null;
         let modoCriacao = false;
         let quill = null;
+        let abaAtiva = 'roteiros';
 
         const welcomeHTML = `
         <div class="welcome-screen" id="welcome-screen">
             <img src="/assets/lamp-icon.gif" alt="doc" width="112" height="112" style="border:none; margin:0;">
-            <h1>Central de Roteiros</h1>
-            <p>Selecione um roteiro no painel ao lado<br>ou use o campo de busca para encontrar o que precisa.</p>
+            <h1 id="welcome-title">Central de Roteiros</h1>
+            <p id="welcome-desc">Selecione um roteiro no painel ao lado<br>ou use o campo de busca para encontrar o que precisa.</p>
         </div>`;
 
         window.addEventListener('DOMContentLoaded', () => {
             quill = new Quill('#quill-editor', {
                 theme: 'snow',
                 modules: {
-                    // syntax: true,
                     toolbar: [
                         [{ 'font': [] }],
                         [{ 'header': [1, 2, 3, false] }],
                         ['bold', 'italic', 'underline', 'strike'],
+                        [{ 'align': [] }],
                         [{ 'color': [] }, { 'background': [] }],
                         [{ 'list': 'ordered'}, { 'list': 'bullet' }],
                         ['blockquote', 'code-block'],
-                        ['image', 'link'],
+                        ['image', 'video', 'link'],
                         ['clean']
                     ]
                 }
             });
             carregarDocumentos();
+        });
+
+        window.addEventListener('click', (e) => {
+            if (!e.target.matches('.win-menu-item-container span')) {
+                const dropdowns = document.getElementsByClassName("win-dropdown-menu");
+                for (let i = 0; i < dropdowns.length; i++) {
+                    let openDropdown = dropdowns[i];
+                    if (openDropdown.classList.contains('show')) {
+                        openDropdown.classList.remove('show');
+                    }
+                }
+            }
         });
 
         document.addEventListener('keydown', (e) => {
@@ -173,9 +180,35 @@
             }
         });
 
+        function toggleDropdown(event) {
+            event.stopPropagation();
+            document.getElementById("dropdown-exibir").classList.toggle("show");
+        }
+
+        function mudarAbaLateral(aba, tituloSidebar, headerListbox) {
+            abaAtiva = aba;
+            
+            document.getElementById('sidebar-title-text').textContent = `Navegação (${tituloSidebar})`;
+            document.getElementById('sidebar-listbox-header').textContent = headerListbox;
+            document.querySelectorAll('.win-dropdown-item').forEach(item => item.classList.remove('active-check'));
+            document.getElementById(`opt-${aba}`).classList.add('active-check');
+
+            arquivoAberto = null;
+            document.getElementById('content').innerHTML = welcomeHTML;
+            
+            const singulares = { 'roteiros': 'roteiro', 'emails': 'e-mail', 'sql': 'script SQL' };
+            const plurarSingular = singulares[aba] || 'item';
+            document.getElementById('welcome-title').textContent = tituloSidebar;
+            document.getElementById('welcome-desc').innerHTML = `Selecione um ${plurarSingular} no painel ao lado<br>ou use o campo de busca para encontrar o que precisa.`;
+            document.getElementById('title-text').textContent = `Visualizador de ${tituloSidebar}`;
+            document.getElementById('status-doc').textContent = `Nenhum ${plurarSingular} selecionado`;
+
+            carregarDocumentos();
+        }
+
         async function carregarDocumentos() {
             try {
-                const res = await fetch('/documentos');
+                const res = await fetch(`/documentos?categoria=${abaAtiva}`);
                 artigos = await res.json();
 
                 const listaSimples = Object.keys(artigos).map(key => ({
@@ -185,7 +218,6 @@
                 }));
 
                 renderMenu(listaSimples, '');
-
                 return true;
             } catch (err) {
                 console.error("Erro ao carregar documentos:", err);
@@ -199,6 +231,7 @@
 
             const formData = new FormData();
             formData.append("pdf", file);
+            formData.append("categoria", abaAtiva); 
 
             fetch("/upload", {
                 method: "POST",
@@ -238,7 +271,6 @@
             el.classList.add('active');
 
             const cw = document.getElementById('content-wrapper');
-            cw.classList.remove('minimized', 'closed');
             cw.style.display = '';
             cw.style.flex = '1';
         }
@@ -253,7 +285,7 @@
                     return;
                 }
 
-                const res = await fetch('/search?busca=' + encodeURIComponent(termo));
+                const res = await fetch(`/search?busca=${encodeURIComponent(termo)}&categoria=${abaAtiva}`);
                 const data = await res.json();
 
                 renderMenu(data, termo);
@@ -262,30 +294,31 @@
 
         async function deletarDocumentoAtual() {
             if (!arquivoAberto) {
-                showToast("Selecione um roteiro primeiro para poder excluí-lo.");
+                const singulares = { 'roteiros': 'roteiro', 'emails': 'e-mail', 'sql': 'script SQL' };
+                showToast(`Selecione um ${singulares[abaAtiva] || 'item'} primeiro para poder excluí-lo.`);
                 return;
             }
 
             const confirmacao = await showConfirm(
-                `Tem certeza que deseja apagar permanentemente o roteiro "${artigos[arquivoAberto].titulo}"?`,
-                "Excluir Roteiro"
+                `Tem certeza que deseja apagar permanentemente este item "${artigos[arquivoAberto].titulo}"?`,
+                "Excluir Item"
             );
 
             if (!confirmacao) return;
 
             try {
-                const res = await fetch(`/documentos/${encodeURIComponent(arquivoAberto)}`, {
+                const res = await fetch(`/documentos/${encodeURIComponent(arquivoAberto)}?categoria=${abaAtiva}`, {
                     method: 'DELETE'
                 });
 
                 if (!res.ok) throw new Error("Erro do servidor ao deletar");
 
-                showToast("Roteiro removido com sucesso!");
+                showToast("Item removido com sucesso!");
 
                 arquivoAberto = null;
                 document.getElementById('content').innerHTML = welcomeHTML;
-                document.getElementById('title-text').textContent = 'Visualizador de Roteiros';
-                document.getElementById('status-doc').textContent = 'Nenhum artigo selecionado';
+
+                mudarAbaLateral(abaAtiva, document.getElementById('sidebar-title-text').textContent.replace("Navegação (", "").replace(")", ""), document.getElementById('sidebar-listbox-header').textContent);
 
                 carregarDocumentos();
 
@@ -306,8 +339,12 @@
                 a.dataset.file = item.arquivo;
                 a.dataset.title = item.titulo;
 
+                let icone = '/assets/file-type.png';
+                if (abaAtiva === 'sql') icone = '/assets/database-icon.png'; 
+                if (abaAtiva === 'emails') icone = '/assets/mail-icon.png';
+
                 a.innerHTML = `
-                    <img src="/assets/file-type.png" width="12" height="12">
+                    <img src="${icone}" width="12" height="12" onerror="this.src='/assets/file-type.png'">
                     ${highlightText(item.titulo, termo)}
                 `;
 
@@ -320,7 +357,8 @@
                 menu.appendChild(li);
             });
 
-            document.getElementById('status-count').textContent = items.length + ' artigos';
+            const labelsUnidade = { 'roteiros': 'artigos', 'emails': 'e-mails', 'sql': 'queries' };
+            document.getElementById('status-count').textContent = items.length + ' ' + (labelsUnidade[abaAtiva] || 'itens');
         }
 
         function highlightText(text, term) {
@@ -328,63 +366,6 @@
             const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const regex = new RegExp(`(${escaped})`, 'gi');
             return text.replace(regex, '<span class="highlight">$1</span>');
-        }
-
-        function minimizePanel(id) {
-            const panel = document.getElementById(id);
-            const taskbar = document.getElementById('taskbar');
-            if (document.querySelector(`.taskbar-item[data-id="${id}"]`)) {
-                panel.style.display = 'none';
-                return;
-            }
-            const title = panel.querySelector('.win-titlebar').innerText.trim();
-            const item = document.createElement('div');
-            item.className = 'taskbar-item';
-            item.dataset.id = id;
-            item.textContent = title;
-            item.onclick = () => restoreFromTaskbar(id);
-            taskbar.appendChild(item);
-            panel.style.display = 'none';
-        }
-
-        function restoreFromTaskbar(id) {
-            const panel = document.getElementById(id);
-            panel.style.display = '';
-            const item = document.querySelector(`.taskbar-item[data-id="${id}"]`);
-            if (item) item.remove();
-        }
-
-        function maximizePanel(id) {
-            const panel = document.getElementById(id);
-            panel.classList.remove('minimized');
-            panel.classList.toggle('maximized');
-        }
-
-        function restorePanel(id) {
-            const panel = document.getElementById(id);
-            panel.classList.remove('minimized', 'maximized');
-            panel.style.display = '';
-            if (id === 'content-wrapper') panel.style.flex = '1';
-            if (id === 'sidebar') {
-                panel.style.width = '260px';
-                panel.style.flexShrink = '0';
-            }
-        }
-
-        function closePanel(id) {
-            const panel = document.getElementById(id);
-            panel.classList.remove('minimized', 'maximized');
-            const item = document.querySelector(`.taskbar-item[data-id="${id}"]`);
-            if (item) item.remove();
-
-            if (id === 'content-wrapper') {
-                document.getElementById('content').innerHTML = welcomeHTML;
-                document.getElementById('title-text').textContent = 'Visualizador de Roteiros';
-                document.getElementById('status-doc').textContent = 'Nenhum artigo selecionado';
-                document.querySelectorAll('#menu a').forEach(a => a.classList.remove('active'));
-            } else {
-                panel.style.display = 'none';
-            }
         }
 
         function imprimirConteudo() {
@@ -424,7 +405,8 @@
 
        function ativarModoEdicao() {
             if (!arquivoAberto) {
-                showToast("Selecione um roteiro na lista antes de tentar editar.");
+                const singulares = { 'roteiros': 'roteiro', 'emails': 'e-mail', 'sql': 'script SQL' };
+                showToast(`Selecione um ${singulares[abaAtiva] || 'item'} na lista antes de tentar editar.`);
                 return;
             }
 
@@ -439,7 +421,20 @@
         }
 
         function criarNovoRoteiro() {
+            const labelsCriacao = { 
+                'roteiros': 'Novo Roteiro', 
+                'emails': 'Nova Sugestão de E-mail', 
+                'sql': 'Nova Sugestão de SQL' 
+            };
+            const placeholders = { 
+                'roteiros': 'Ex: Como Fazer o Faturamento Cassi', 
+                'emails': 'Ex: E-mail de Cobrança Padrão', 
+                'sql': 'Ex: Consulta de Guias Glosadas' 
+            };
+
             document.getElementById('prompt-title-input').value = '';
+            document.getElementById('modal-label-title').textContent = `Título do ${labelsCriacao[abaAtiva]}:`;
+            document.getElementById('prompt-title-input').placeholder = placeholders[abaAtiva] || '';
             document.getElementById('custom-prompt-modal').style.display = 'flex';
             setTimeout(() => document.getElementById('prompt-title-input').focus(), 50);
         }
@@ -466,7 +461,7 @@
                 });
 
                 if (jaExiste) {
-                    showToast(`O roteiro "${tituloRoteiro}" já existe! Escolha outro nome.`);
+                    showToast(`O item "${tituloRoteiro}" já existe! Escolha outro nome.`);
                     setTimeout(() => document.getElementById('prompt-title-input').focus(), 50);
                     return;
                 }
@@ -476,17 +471,17 @@
 
                 const cw = document.getElementById('content-wrapper');
                 if (cw) {
-                    cw.classList.remove('minimized', 'closed');
                     cw.style.display = '';
                     cw.style.flex = '1';
                 }
 
-                document.getElementById('title-text').textContent = `Novo Roteiro: ${tituloRoteiro}`;
+                const labelsVisual = { 'roteiros': 'Roteiro', 'emails': 'E-mail', 'sql': 'SQL' };
+                document.getElementById('title-text').textContent = `Novo ${labelsVisual[abaAtiva] || 'Item'}: ${tituloRoteiro}`;
                 document.getElementById('status-doc').textContent = `Criando: ${arquivoNome}`;
                 document.getElementById('content').style.display = 'none';
                 document.getElementById('editor-container').style.display = 'flex';
 
-                quill.clipboard.dangerouslyPasteHTML(`<h1>${tituloRoteiro}</h1><p>Comece a escrever seu roteiro aqui...</p>`);
+                quill.clipboard.dangerouslyPasteHTML(`<h1>${tituloRoteiro}</h1><p>Insira as informações do novo item aqui...</p>`);
                 quill.focus();
             } finally {
                 fecharPromptModal();
@@ -495,13 +490,16 @@
 
         async function salvarEdicaoAtual() {
             if (!arquivoAberto) {
-                showToast("Nenhum roteiro ativo detectado.");
+                showToast("Nenhum item ativo detectado.");
                 return;
             }
 
             const novoHtml = quill.getSemanticHTML();
-            const tituloVisual = document.getElementById('title-text').textContent.replace("Novo Roteiro: ", "");
-            const endpoint = modoCriacao ? '/documentos' : `/documentos/${encodeURIComponent(arquivoAberto)}`;
+            const prefixoRemover = ["Novo Roteiro: ", "Novo E-mail: ", "Novo SQL: "];
+            let tituloVisual = document.getElementById('title-text').textContent;
+            prefixoRemover.forEach(pfx => { tituloVisual = tituloVisual.replace(pfx, ""); });
+
+            const endpoint = modoCriacao ? `/documentos?categoria=${abaAtiva}` : `/documentos/${encodeURIComponent(arquivoAberto)}?categoria=${abaAtiva}`;
             const metodoHTTP = modoCriacao ? 'POST' : 'PUT';
 
             const corpoPayload = {
@@ -529,7 +527,7 @@
 
                 await res.json();
 
-                showToast("Roteiro salvo!");
+                showToast("Item salvo!");
 
                 document.getElementById('editor-container').style.display = 'none';
                 document.getElementById('content').style.display = 'block';
@@ -563,8 +561,7 @@
             if (modoCriacao || !arquivoAberto) {
                 arquivoAberto = null;
                 document.getElementById('content').innerHTML = welcomeHTML;
-                document.getElementById('title-text').textContent = 'Visualizador de Roteiros';
-                document.getElementById('status-doc').textContent = 'Nenhum artigo selecionado';
+                mudarAbaLateral(abaAtiva, document.getElementById('sidebar-title-text').textContent.replace("Navegação (", "").replace(")", ""), document.getElementById('sidebar-listbox-header').textContent);
             } else {
                 document.getElementById('content').innerHTML = artigos[arquivoAberto].html;
             }

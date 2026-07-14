@@ -19,23 +19,25 @@ const userData = process.argv.find(arg => arg.startsWith('--user-data='))
     : path.join(process.env.APPDATA || process.env.HOME, 'central-roteiros');
 
 const DB_PATH = path.join(userData, 'database.db');
-const ROTEIROS_PATH = path.join(userData, 'roteiros');
 
-if (!fs.existsSync(ROTEIROS_PATH)) {
-    fs.mkdirSync(ROTEIROS_PATH, { recursive: true });
+const PDF_CACHE_PATH = path.join(userData, 'pdf_cache');
+if (!fs.existsSync(PDF_CACHE_PATH)) {
+    fs.mkdirSync(PDF_CACHE_PATH, { recursive: true });
 }
 
 const db = new sqlite3(DB_PATH);
 
 /*
-* BANCO DE DADOS
+* BANCO DE DADOS (SQLite-First com migração automática)
 */
 db.exec(`
     CREATE TABLE IF NOT EXISTS documentos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        arquivo TEXT UNIQUE,
-        tipo TEXT,
-        titulo TEXT
+        arquivo TEXT UNIQUE, -- Chave de identificação no front-end
+        tipo TEXT,           -- 'html', 'md', 'pdf'
+        titulo TEXT,
+        conteudo TEXT,       -- Conteúdo real do arquivo (HTML bruto ou Markdown)
+        categoria TEXT DEFAULT 'roteiros'
     );
     CREATE VIRTUAL TABLE IF NOT EXISTS documentos_busca USING fts5(
         documento_id UNINDEXED,
@@ -45,62 +47,27 @@ db.exec(`
     );
 `);
 
-async function indexarArquivo(nomeArquivo) {
-    const extensao = path.extname(nomeArquivo).toLowerCase().replace('.', '');
-    if (extensao !== 'md' && extensao !== 'pdf') return;
-
-    const existe = db.prepare("SELECT id FROM documentos WHERE arquivo = ?").get(nomeArquivo);
-    if (existe) return;
-
-    const caminhoCompleto = path.join(ROTEIROS_PATH, nomeArquivo);
-    const nomeSemExtensao = path.basename(nomeArquivo, path.extname(nomeArquivo));
+try {
+    const infoTabela = db.prepare("PRAGMA table_info(documentos)").all();
     
-    const titulo = nomeSemExtensao
-        .replace(/[-_]/g, ' ')
-        .replace(/\b\w/g, l => l.toUpperCase());
-
-    let textoExtraido = '';
-
-    try {
-        if (extensao === 'md') {
-            textoExtraido = fs.readFileSync(caminhoCompleto, 'utf-8');
-        } else if (extensao === 'pdf') {
-            const dataBuffer = fs.readFileSync(caminhoCompleto);
-            const data = await pdfParse(dataBuffer);
-            textoExtraido = data.text || '';
-        }
-
-        const insertDoc = db.prepare("INSERT INTO documentos (arquivo, tipo, titulo) VALUES (?, ?, ?)");
-        const info = insertDoc.run(nomeArquivo, extensao, titulo);
-        const docId = info.lastInsertRowid;
-
-        const insertFts = db.prepare("INSERT INTO documentos_busca (documento_id, titulo, conteudo) VALUES (?, ?, ?)");
-        insertFts.run(docId, titulo, textoExtraido);
-        
-        console.log(`[Indexador] Sucesso ao indexar: ${nomeArquivo}`);
-    } catch (err) {
-        console.error(`[Indexador] Erro ao processar ${nomeArquivo}:`, err);
+    const temCategoria = infoTabela.some(col => col.name === 'categoria');
+    if (!temCategoria) {
+        db.exec("ALTER TABLE documentos ADD COLUMN categoria TEXT DEFAULT 'roteiros'");
+        console.log("[DB] Coluna 'categoria' adicionada.");
     }
-}
 
-async function sincronizarDiretorio() {
-    try {
-        const arquivosNaPasta = fs.readdirSync(ROTEIROS_PATH);
-        for (const arquivo of arquivosNaPasta) {
-            const caminhoFisico = path.join(ROTEIROS_PATH, arquivo);
-            if (fs.statSync(caminhoFisico).isFile()) {
-                await indexarArquivo(arquivo);
-            }
-        }
-    } catch (err) {
-        console.error("Erro na sincronização inicial:", err);
+    const temConteudo = infoTabela.some(col => col.name === 'conteudo');
+    if (!temConteudo) {
+        db.exec("ALTER TABLE documentos ADD COLUMN conteudo TEXT");
+        console.log("[DB] Coluna 'conteudo' adicionada para suporte offline completo.");
     }
+} catch (e) {
+    console.error("[DB] Erro ao atualizar estrutura da tabela:", e);
 }
-sincronizarDiretorio();
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, ROTEIROS_PATH);
+        cb(null, PDF_CACHE_PATH);
     },
     filename: (req, file, cb) => {
         cb(null, file.originalname);
@@ -108,20 +75,19 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-appExpress.use('/roteiros', express.static(ROTEIROS_PATH));
+appExpress.use('/pdfs', express.static(PDF_CACHE_PATH));
+
 appExpress.use('/assets', express.static(path.join(__dirname, 'assets')));
 appExpress.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
-//appExpress.use(express.json());
 
 appExpress.use(express.json({ limit: '50mb' }));
 appExpress.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 /*
-* ROTAS
+* MECANISMO DE BUSCA FTS5
 */
-
 const STOPWORDS_PT = new Set([
     'a', 'o', 'as', 'os', 'um', 'uma', 'uns', 'umas',
     'de', 'do', 'da', 'dos', 'das', 'em', 'no', 'na', 'nos', 'nas',
@@ -149,6 +115,7 @@ function montarQueryFts(termo) {
  
 appExpress.get('/search', (req, res) => {
     let termo = (req.query.busca || '').trim();
+    let categoria = req.query.categoria || 'roteiros'; 
     if (!termo) {
         return res.json([]);
     }
@@ -164,15 +131,16 @@ appExpress.get('/search', (req, res) => {
                 d.arquivo,
                 d.titulo,
                 d.tipo,
+                d.categoria,
                 bm25(documentos_busca, 5.0, 1.0) AS score
             FROM documentos d
             JOIN documentos_busca b ON d.id = b.documento_id
-            WHERE documentos_busca MATCH ?
-            ORDER BY score ASC -- O BM25 retorna valores negativos, quanto menor, melhor o match
+            WHERE documentos_busca MATCH ? AND d.categoria = ?
+            ORDER BY score ASC 
             LIMIT 50
         `);
         
-        const result = stmt.all(termoFts);
+        const result = stmt.all(termoFts, categoria);
         res.json(result);
     } catch (error) {
         console.error("Erro na busca:", error);
@@ -180,33 +148,39 @@ appExpress.get('/search', (req, res) => {
     }
 });
 
+/*
+* ROTAS DA API - DOCUMENTOS (SQLite-First)
+*/
+
 appExpress.get('/documentos', (req, res) => {
+    const categoria = req.query.categoria || 'roteiros';
     try {
-        const docs = db.prepare(`SELECT arquivo, titulo, tipo FROM documentos`).all();
+        const docs = db.prepare(`SELECT arquivo, titulo, tipo, conteudo, categoria FROM documentos WHERE categoria = ?`).all(categoria);
         
         const result = {};
         docs.forEach(row => {
-            const caminhoCompleto = path.join(ROTEIROS_PATH, row.arquivo);
             let htmlConteudo = '';
 
-            if (row.tipo === 'md' && fs.existsSync(caminhoCompleto)) {
-                const markdownBruto = fs.readFileSync(caminhoCompleto, 'utf-8');
-                htmlConteudo = marked.parse(markdownBruto);
-            } else if (row.tipo === 'html' && fs.existsSync(caminhoCompleto)) {
-                htmlConteudo = fs.readFileSync(caminhoCompleto, 'utf-8');
+            if (row.tipo === 'md') {
+                htmlConteudo = marked.parse(row.conteudo || '');
+            } else if (row.tipo === 'html') {
+                htmlConteudo = row.conteudo || '';
             } else if (row.tipo === 'pdf') {
-                htmlConteudo = `<iframe src="http://localhost:3000/roteiros/${encodeURIComponent(row.arquivo)}" width="100%" height="750px" style="border:none;"></iframe>`;
+                // PDFs são renderizados apontando para a pasta física de cache estático
+                htmlConteudo = `<iframe src="http://localhost:3000/pdfs/${encodeURIComponent(row.arquivo)}" width="100%" height="750px" style="border:none;"></iframe>`;
             }
 
             result[row.arquivo] = {
                 titulo: row.titulo,
                 html: htmlConteudo,
-                tipo: row.tipo
+                tipo: row.tipo,
+                categoria: row.categoria
             };
         });
 
         res.json(result);
     } catch (error) {
+        console.error("Erro ao listar documentos:", error);
         res.status(500).json({ error: "Erro ao listar documentos" });
     }
 });
@@ -222,33 +196,70 @@ appExpress.post('/upload', upload.single('pdf'), async (req, res) => {
         return res.status(400).json({ error: 'Arquivo não é um PDF' });
     }
 
-    await indexarArquivo(req.file.originalname);
+    const nomeArquivo = req.file.originalname;
+    const categoria = req.body.categoria || req.query.categoria || 'roteiros';
 
-    res.json({ status: 'OK', arquivo: req.file.originalname });
+    try {
+        const existe = db.prepare("SELECT id FROM documentos WHERE arquivo = ?").get(nomeArquivo);
+        if (existe) {
+            return res.status(400).json({ error: 'Este PDF já existe no banco.' });
+        }
+
+        const caminhoPdf = path.join(PDF_CACHE_PATH, nomeArquivo);
+        const dataBuffer = fs.readFileSync(caminhoPdf);
+        const parsedPdf = await pdfParse(dataBuffer);
+        const textoExtraido = parsedPdf.text || '';
+
+        const titulo = path.basename(nomeArquivo, ext)
+            .replace(/[-_]/g, ' ')
+            .replace(/\b\w/g, l => l.toUpperCase());
+
+        const transacaoUpload = db.transaction(() => {
+            const info = db.prepare("INSERT INTO documentos (arquivo, tipo, titulo, conteudo, categoria) VALUES (?, 'pdf', ?, ?, ?)")
+                .run(nomeArquivo, titulo, textoExtraido, categoria);
+            
+            db.prepare("INSERT INTO documentos_busca (documento_id, titulo, conteudo) VALUES (?, ?, ?)")
+                .run(info.lastInsertRowid, titulo, textoExtraido);
+        });
+        
+        transacaoUpload();
+
+        console.log(`[Upload] PDF ${nomeArquivo} salvo e indexado com sucesso na categoria ${categoria}.`);
+        res.json({ status: 'OK', arquivo: nomeArquivo });
+
+    } catch (err) {
+        console.error("[Upload] Erro ao indexar PDF:", err);
+        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        res.status(500).json({ error: 'Erro interno ao indexar arquivo' });
+    }
 });
 
 appExpress.delete('/documentos/:arquivo', (req, res) => {
     const nomeArquivo = req.params.arquivo;
-    const caminhoCompleto = path.join(ROTEIROS_PATH, nomeArquivo);
+    const categoria = req.query.categoria || 'roteiros';
 
     try {
-        const doc = db.prepare("SELECT id FROM documentos WHERE arquivo = ?").get(nomeArquivo);
+        const doc = db.prepare("SELECT id, tipo FROM documentos WHERE arquivo = ? AND categoria = ?").get(nomeArquivo, categoria);
         
         if (!doc) {
             return res.status(404).json({ error: "Documento não encontrado no banco de dados." });
         }
 
-        const deletarFts = db.prepare("DELETE FROM documentos_busca WHERE documento_id = ?");
-        const deletarDoc = db.prepare("DELETE FROM documentos WHERE id = ?");
+        const removerTransacao = db.transaction(() => {
+            db.prepare("DELETE FROM documentos_busca WHERE documento_id = ?").run(doc.id);
+            db.prepare("DELETE FROM documentos WHERE id = ?").run(doc.id);
+        });
 
-        deletarFts.run(doc.id);
-        deletarDoc.run(doc.id);
+        removerTransacao();
 
-        if (fs.existsSync(caminhoCompleto)) {
-            fs.unlinkSync(caminhoCompleto);
+        if (doc.tipo === 'pdf') {
+            const caminhoFisico = path.join(PDF_CACHE_PATH, nomeArquivo);
+            if (fs.existsSync(caminhoFisico)) {
+                fs.unlinkSync(caminhoFisico);
+            }
         }
 
-        console.log(`[Server] Arquivo e dados removidos com sucesso: ${nomeArquivo}`);
+        console.log(`[Server] Item removido da categoria ${categoria}: ${nomeArquivo}`);
         res.json({ status: "OK", mensagem: "Removido com sucesso" });
 
     } catch (error) {
@@ -259,54 +270,60 @@ appExpress.delete('/documentos/:arquivo', (req, res) => {
 
 appExpress.post('/documentos', (req, res) => {
     const { arquivo, titulo, html } = req.body;
+    const categoria = req.query.categoria || 'roteiros';
 
     if (!arquivo || !titulo || !html) {
         return res.status(400).json({ error: "Dados incompletos para criação." });
     }
 
     try {
-        const caminhoFisico = path.join(ROTEIROS_PATH, arquivo);
-        fs.writeFileSync(caminhoFisico, html, 'utf-8');
-
-        const insertDoc = db.prepare("INSERT INTO documentos (arquivo, tipo, titulo) VALUES (?, ?, ?)");
-        const info = insertDoc.run(arquivo, 'html', titulo);
-        const docId = info.lastInsertRowid;
         const textoPuro = html.replace(/<[^>]*>/g, ' ');
-        const insertFts = db.prepare("INSERT INTO documentos_busca (documento_id, titulo, conteudo) VALUES (?, ?, ?)");
-        insertFts.run(docId, titulo, textoPuro);
 
+        const salvarTransacao = db.transaction(() => {
+            const info = db.prepare("INSERT INTO documentos (arquivo, tipo, titulo, conteudo, categoria) VALUES (?, 'html', ?, ?, ?)")
+                .run(arquivo, titulo, html, categoria);
+            
+            db.prepare("INSERT INTO documentos_busca (documento_id, titulo, conteudo) VALUES (?, ?, ?)")
+                .run(info.lastInsertRowid, titulo, textoPuro);
+        });
+
+        salvarTransacao();
         res.json({ status: "OK", arquivo });
     } catch (error) {
-        console.error("Erro ao criar roteiro:", error);
-        res.status(500).json({ error: "Erro interno ao criar roteiro." });
+        console.error("Erro ao criar item:", error);
+        res.status(500).json({ error: "Erro interno ao criar item." });
     }
 });
 
 appExpress.put('/documentos/:arquivo', (req, res) => {
     const nomeArquivo = req.params.arquivo;
     const { html } = req.body;
+    const categoria = req.query.categoria || 'roteiros';
 
     if (!html) {
         return res.status(400).json({ error: "Conteúdo vazio." });
     }
 
     try {
-        const caminhoFisico = path.join(ROTEIROS_PATH, nomeArquivo);
-        fs.writeFileSync(caminhoFisico, html, 'utf-8');
-
-        const doc = db.prepare("SELECT id, titulo FROM documentos WHERE arquivo = ?").get(nomeArquivo);
+        const doc = db.prepare("SELECT id, titulo FROM documentos WHERE arquivo = ? AND categoria = ?").get(nomeArquivo, categoria);
         if (!doc) {
             return res.status(404).json({ error: "Documento não encontrado no banco." });
         }
 
         const textoPuro = html.replace(/<[^>]*>/g, ' ');
-        const updateFts = db.prepare("UPDATE documentos_busca SET conteudo = ? WHERE documento_id = ?");
-        updateFts.run(textoPuro, doc.id);
 
-        res.json({ status: "OK", mensagem: "Roteiro atualizado com sucesso." });
+        const atualizarTransacao = db.transaction(() => {
+            db.prepare("UPDATE documentos SET conteudo = ? WHERE id = ?")
+                .run(html, doc.id);
+            db.prepare("UPDATE documentos_busca SET conteudo = ? WHERE documento_id = ?")
+                .run(textoPuro, doc.id);
+        });
+
+        atualizarTransacao();
+        res.json({ status: "OK", mensagem: "Item atualizado com sucesso." });
     } catch (error) {
-        console.error("Erro ao atualizar roteiro:", error);
-        res.status(500).json({ error: "Erro interno ao atualizar roteiro." });
+        console.error("Erro ao atualizar item:", error);
+        res.status(500).json({ error: "Erro interno ao atualizar item." });
     }
 });
 

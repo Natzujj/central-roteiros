@@ -778,3 +778,77 @@
 #menu-lista li a {
     user-select: none;
 }
+
+/* Customizações para o Modal Neobrutalista */
+.win-modal-overlay {
+    position: fixed; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%; 
+    background: rgba(0, 0, 0, 0.4); 
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+    z-index: 9999;
+}
+
+/* Área de rolagem dos inputs dentro do modal */
+.modal-form-scroll {
+    max-height: 250px; 
+    overflow-y: auto; 
+    margin-bottom: 16px;
+    padding-right: 4px;
+}
+
+/* Customização da barra de rolagem para combinar com o padrão retro/neobrutalista */
+.modal-form-scroll::-webkit-scrollbar {
+    width: 10px;
+}
+.modal-form-scroll::-webkit-scrollbar-track {
+    background: #fff;
+    border-left: 3px solid var(--win-dark);
+}
+.modal-form-scroll::-webkit-scrollbar-thumb {
+    background: var(--win-dark);
+    border: 1px solid #fff;
+}
+
+/* Container de ações no rodapé do modal */
+.modal-footer-actions {
+    display: flex; 
+    justify-content: flex-end; 
+    gap: 12px;
+}
+
+/* Sobrescreve botões específicos para manter o padrão de cliques ativos do neobrutalismo */
+.modal-footer-actions .btn {
+    padding: 8px 20px;
+}
+
+.modal-footer-actions .btn:active {
+    transform: translate(2px, 2px);
+    box-shadow: 0px 0px 0px #000;
+}
+
+/* Estilo para inputs de data gerados dinamicamente para seguirem o .input-title */
+.sql-input-value {
+    width: 100%;
+    background: #fff;
+    border: 3px solid var(--win-dark);
+    box-shadow: 3px 3px 0px #000;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    outline: none;
+    border-radius: 0;
+    transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.sql-input-value:focus {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0px #000;
+    outline: none;
+    background: #f0f0f0;
+}

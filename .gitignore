@@ -17,5 +17,8 @@ coverage
 # Benchmarking
 benchmarks/graphs
 
+/.vscode
+/.continue
+
 # ignore additional files using core.excludesFile
 # https://git-scm.com/docs/gitignore
